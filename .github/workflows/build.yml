@@ -1,0 +1,76 @@
+name: Build
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: macos-latest
+            args: --target aarch64-apple-darwin
+            rust_targets: aarch64-apple-darwin
+          - platform: macos-latest
+            args: --target x86_64-apple-darwin
+            rust_targets: x86_64-apple-darwin
+          - platform: ubuntu-22.04
+            args: ""
+            rust_targets: ""
+          - platform: windows-latest
+            args: ""
+            rust_targets: ""
+    runs-on: ${{ matrix.platform }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Dependencias de Linux
+        if: startsWith(matrix.platform, 'ubuntu')
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.rust_targets }}
+
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+
+      - run: npm ci
+
+      - uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          args: ${{ matrix.args }}
+          # Solo publica el release al subir un tag v*
+          tagName: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || '' }}
+          releaseName: MD Viewer ${{ github.ref_name }}
+          releaseDraft: false
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: md-viewer-${{ matrix.platform }}-${{ matrix.rust_targets || 'native' }}
+          path: |
+            src-tauri/target/**/release/bundle/**/*.dmg
+            src-tauri/target/**/release/bundle/**/*.deb
+            src-tauri/target/**/release/bundle/**/*.rpm
+            src-tauri/target/**/release/bundle/**/*.AppImage
+            src-tauri/target/**/release/bundle/**/*.msi
+            src-tauri/target/**/release/bundle/**/*.exe
+          if-no-files-found: ignore

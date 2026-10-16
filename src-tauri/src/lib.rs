@@ -9,8 +9,14 @@ use tauri_plugin_opener::OpenerExt;
 
 const MD_EXTENSIONS: &[&str] = &["md", "markdown", "mdown", "mkd", "txt"];
 
-/// Archivo recibido por línea de comandos (doble clic en un .md desde el Explorador).
-struct StartupFile(Mutex<Option<PathBuf>>);
+/// Archivo con el que se abrió la app (doble clic en un .md desde el Explorador o Finder).
+/// `ready` indica que la interfaz ya lo pidió; a partir de ahí los archivos nuevos se emiten como evento.
+struct StartupFile(Mutex<Startup>);
+
+struct Startup {
+    path: Option<PathBuf>,
+    ready: bool,
+}
 
 #[derive(Serialize)]
 struct Doc {
@@ -30,7 +36,9 @@ fn read_doc(path: &Path) -> Result<Doc, String> {
 
 #[tauri::command]
 fn startup_file(state: State<StartupFile>) -> Result<Option<Doc>, String> {
-    match state.0.lock().unwrap().take() {
+    let mut startup = state.0.lock().unwrap();
+    startup.ready = true;
+    match startup.path.take() {
         Some(path) => read_doc(&path).map(Some),
         None => Ok(None),
     }
@@ -62,12 +70,11 @@ fn render_markdown(text: String) -> String {
 
 #[tauri::command]
 async fn open_dialog(app: AppHandle) -> Result<Option<Doc>, String> {
-    let picked = app
-        .dialog()
-        .file()
-        .add_filter("Markdown", MD_EXTENSIONS)
-        .add_filter("Todos los archivos", &["*"])
-        .blocking_pick_file();
+    let dialog = app.dialog().file().add_filter("Markdown", MD_EXTENSIONS);
+    // En macOS los filtros se combinan en uno solo y "*" no es una extensión válida
+    #[cfg(not(target_os = "macos"))]
+    let dialog = dialog.add_filter("Todos los archivos", &["*"]);
+    let picked = dialog.blocking_pick_file();
     match picked {
         Some(fp) => {
             let path = fp.into_path().map_err(|e| e.to_string())?;
@@ -99,7 +106,7 @@ fn open_url(app: AppHandle, url: String) -> Result<(), String> {
     app.opener().open_url(url, None::<&str>).map_err(|e| e.to_string())
 }
 
-/// Primer argumento que sea un archivo existente (Windows pasa la ruta como argv[1]).
+/// Primer argumento que sea un archivo existente (Windows y Linux pasan la ruta como argv[1]).
 fn file_from_args() -> Option<PathBuf> {
     std::env::args_os()
         .skip(1)
@@ -107,12 +114,29 @@ fn file_from_args() -> Option<PathBuf> {
         .find(|p| !p.to_string_lossy().starts_with('-') && p.is_file())
 }
 
+/// macOS no pasa el archivo por argumentos: llega como evento `Opened` (antes o después de cargar la interfaz).
+#[cfg(any(target_os = "macos", target_os = "ios"))]
+fn handle_opened(app: &AppHandle, urls: Vec<tauri::Url>) {
+    use tauri::{Emitter, Manager};
+    let Some(path) = urls.into_iter().find_map(|u| u.to_file_path().ok()) else { return };
+    let state = app.state::<StartupFile>();
+    let mut startup = state.0.lock().unwrap();
+    if startup.ready {
+        let _ = app.emit("open-file", path.to_string_lossy().into_owned());
+    } else {
+        startup.path = Some(path);
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
+    let app = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
-        .manage(StartupFile(Mutex::new(file_from_args())))
+        .manage(StartupFile(Mutex::new(Startup {
+            path: file_from_args(),
+            ready: false,
+        })))
         .invoke_handler(tauri::generate_handler![
             startup_file,
             read_file,
@@ -122,6 +146,13 @@ pub fn run() {
             save_as_dialog,
             open_url
         ])
-        .run(tauri::generate_context!())
+        .build(tauri::generate_context!())
         .expect("error al iniciar MD Viewer");
+
+    app.run(|_app, _event| {
+        #[cfg(any(target_os = "macos", target_os = "ios"))]
+        if let tauri::RunEvent::Opened { urls } = _event {
+            handle_opened(_app, urls);
+        }
+    });
 }

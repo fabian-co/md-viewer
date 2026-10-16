@@ -14,6 +14,7 @@ const state = {
   crlf: false, // conservar saltos de línea de Windows al guardar
 };
 
+const isMac = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
 const isDirty = () => editor.value !== state.saved;
 const baseName = (p) => (p ? p.split(/[\\/]/).pop() : "Sin título");
 
@@ -149,7 +150,7 @@ editor.addEventListener("input", () => {
 
 // Tab inserta espacios en lugar de cambiar el foco
 editor.addEventListener("keydown", (e) => {
-  if (e.key === "Tab" && !e.ctrlKey) {
+  if (e.key === "Tab" && !e.ctrlKey && !e.metaKey) {
     e.preventDefault();
     document.execCommand("insertText", false, "  ");
   }
@@ -177,7 +178,8 @@ preview.addEventListener("click", (e) => {
 
 const modes = ["edit", "split", "view"];
 document.addEventListener("keydown", (e) => {
-  if (!e.ctrlKey) return;
+  // Cmd en macOS, Ctrl en Windows y Linux
+  if (!(isMac ? e.metaKey : e.ctrlKey)) return;
   const k = e.key.toLowerCase();
   if (k === "s" && e.shiftKey) { e.preventDefault(); saveAs(); }
   else if (k === "s") { e.preventDefault(); save(); }
@@ -196,12 +198,22 @@ listen("tauri://drag-drop", (event) => {
   if (path) openPath(path);
 });
 
+// macOS: archivo abierto desde Finder con la app ya en marcha
+listen("open-file", (event) => openPath(event.payload));
+
 // Avisar de cambios sin guardar al cerrar
 appWindow.onCloseRequested((event) => {
   if (!confirmDiscard()) event.preventDefault();
 });
 
 // ---------- Inicio ----------
+
+// Muestra los atajos con ⌘ en macOS
+if (isMac) {
+  document.querySelectorAll("[title*='Ctrl+']").forEach((el) => {
+    el.title = el.title.replace(/Ctrl\+Shift\+/g, "⇧⌘").replace(/Ctrl\+/g, "⌘");
+  });
+}
 
 (async () => {
   try {
