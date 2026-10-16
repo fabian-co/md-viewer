@@ -142,6 +142,12 @@ document.getElementById("btn-save").onclick = save;
 document.getElementById("btn-save-as").onclick = saveAs;
 document.querySelectorAll(".modes button").forEach((b) => (b.onclick = () => setMode(b.dataset.mode)));
 
+// Barra de formato: mousedown sin foco para no perder la selección del editor
+document.querySelectorAll("[data-fmt]").forEach((b) => {
+  b.onmousedown = (e) => e.preventDefault();
+  b.onclick = () => Format.apply(editor, b.dataset.fmt);
+});
+
 editor.addEventListener("input", () => {
   scheduleRender();
   updateTitle();
@@ -179,7 +185,15 @@ preview.addEventListener("click", (e) => {
 const modes = ["edit", "split", "view"];
 document.addEventListener("keydown", (e) => {
   // Cmd en macOS, Ctrl en Windows y Linux
-  if (!(isMac ? e.metaKey : e.ctrlKey)) return;
+  if (!(isMac ? e.metaKey : e.ctrlKey) || e.altKey) return;
+  if (document.activeElement === editor) {
+    const fmt = Format.shortcut(e);
+    if (fmt) {
+      e.preventDefault();
+      Format.apply(editor, fmt);
+      return;
+    }
+  }
   const k = e.key.toLowerCase();
   if (k === "s" && e.shiftKey) { e.preventDefault(); saveAs(); }
   else if (k === "s") { e.preventDefault(); save(); }

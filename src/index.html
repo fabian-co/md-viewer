@@ -22,6 +22,33 @@
     </div>
   </header>
 
+  <nav class="formatbar" aria-label="Formato">
+    <div class="group">
+      <button data-fmt="h1" title="Título 1 (Ctrl+1)">H1</button>
+      <button data-fmt="h2" title="Título 2 (Ctrl+2)">H2</button>
+      <button data-fmt="h3" title="Título 3 (Ctrl+3)">H3</button>
+    </div>
+    <div class="group">
+      <button data-fmt="bold" title="Negrita (Ctrl+B)"><b>B</b></button>
+      <button data-fmt="italic" title="Cursiva (Ctrl+I)"><i>I</i></button>
+      <button data-fmt="strike" title="Tachado (Ctrl+Shift+X)"><s>S</s></button>
+      <button data-fmt="code" title="Código en línea (Ctrl+Shift+C)"><code>&lt;/&gt;</code></button>
+    </div>
+    <div class="group">
+      <button data-fmt="ul" title="Lista con viñetas (Ctrl+Shift+8)">• Lista</button>
+      <button data-fmt="ol" title="Lista numerada (Ctrl+Shift+7)">1. Lista</button>
+      <button data-fmt="task" title="Lista de tareas">☑ Tareas</button>
+      <button data-fmt="quote" title="Cita (Ctrl+Shift+.)">❝ Cita</button>
+    </div>
+    <div class="group">
+      <button data-fmt="link" title="Enlace (Ctrl+K)">Enlace</button>
+      <button data-fmt="image" title="Imagen">Imagen</button>
+      <button data-fmt="codeblock" title="Bloque de código">{ } Código</button>
+      <button data-fmt="table" title="Tabla">Tabla</button>
+      <button data-fmt="hr" title="Línea horizontal">―</button>
+    </div>
+  </nav>
+
   <main class="panes">
     <textarea id="editor" spellcheck="false" placeholder="Escribe Markdown aquí..."></textarea>
     <article id="preview" class="markdown"></article>
@@ -32,6 +59,7 @@
     <span id="status-count"></span>
   </footer>
 
+  <script src="format.js"></script>
   <script src="main.js"></script>
 </body>
 </html>

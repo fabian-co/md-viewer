@@ -4,6 +4,7 @@ Visor y editor sencillo de archivos Markdown hecho con Tauri 2 + Rust. Funciona 
 
 - Vistas: Editar, Dividido (vista previa en vivo) y Vista
 - Asociación con `.md` / `.markdown` al instalar (doble clic desde el Explorador, Finder o el gestor de archivos)
+- Barra de formato: títulos H1–H3, negrita, cursiva, tachado, código, listas, tareas, citas, enlaces, imágenes, bloques de código, tablas y líneas horizontales
 - Arrastrar y soltar archivos sobre la ventana
 - Atajos (`Ctrl` en Windows/Linux, `⌘` en macOS):
 
@@ -14,6 +15,14 @@ Visor y editor sencillo de archivos Markdown hecho con Tauri 2 + Rust. Funciona 
 | `Ctrl/⌘+S` | Guardar |
 | `Ctrl/⌘+Shift+S` | Guardar como |
 | `Ctrl/⌘+E` | Cambiar vista |
+| `Ctrl/⌘+B` | Negrita |
+| `Ctrl/⌘+I` | Cursiva |
+| `Ctrl/⌘+Shift+X` | Tachado |
+| `Ctrl/⌘+Shift+C` | Código en línea |
+| `Ctrl/⌘+1` / `2` / `3` | Título 1 / 2 / 3 |
+| `Ctrl/⌘+K` | Enlace |
+| `Ctrl/⌘+Shift+8` / `7` | Lista con viñetas / numerada |
+| `Ctrl/⌘+Shift+.` | Cita |
 
 ## Descargas
 
