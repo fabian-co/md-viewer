@@ -17,13 +17,18 @@ Visor y editor sencillo de archivos Markdown hecho con Tauri 2 + Rust. Funciona 
 
 ## Descargas
 
-Los instaladores se generan con GitHub Actions en cada push (pestaña **Actions** → artefactos) y al publicar un tag `v*` (pestaña **Releases**):
+Última versión: **[v1.0.0](https://github.com/fabian-co/md-viewer/releases/latest)**
 
-| Sistema | Formatos |
+| Sistema | Descarga |
 |---------|----------|
-| Windows | `.msi`, `.exe` (NSIS) |
-| macOS (Apple Silicon e Intel) | `.dmg`, `.app` |
-| Linux | `.deb`, `.rpm`, `.AppImage` |
+| Windows | [Instalador `.exe`](https://github.com/fabian-co/md-viewer/releases/download/v1.0.0/MD.Viewer_1.0.0_x64-setup.exe) · [`.msi`](https://github.com/fabian-co/md-viewer/releases/download/v1.0.0/MD.Viewer_1.0.0_x64_en-US.msi) |
+| macOS (Apple Silicon M1/M2/M3…) | [`.dmg`](https://github.com/fabian-co/md-viewer/releases/download/v1.0.0/MD.Viewer_1.0.0_aarch64.dmg) |
+| macOS (Intel) | [`.dmg`](https://github.com/fabian-co/md-viewer/releases/download/v1.0.0/MD.Viewer_1.0.0_x64.dmg) |
+| Linux (Debian/Ubuntu) | [`.deb`](https://github.com/fabian-co/md-viewer/releases/download/v1.0.0/MD.Viewer_1.0.0_amd64.deb) |
+| Linux (Fedora/openSUSE) | [`.rpm`](https://github.com/fabian-co/md-viewer/releases/download/v1.0.0/MD.Viewer-1.0.0-1.x86_64.rpm) |
+| Linux (cualquier distro) | [`.AppImage`](https://github.com/fabian-co/md-viewer/releases/download/v1.0.0/MD.Viewer_1.0.0_amd64.AppImage) |
+
+Todas las versiones están en la pestaña [Releases](https://github.com/fabian-co/md-viewer/releases).
 
 > En macOS la app no está firmada: la primera vez ábrela con clic derecho → **Abrir**, o ejecuta
 > `xattr -dr com.apple.quarantine "/Applications/MD Viewer.app"`.
