@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>MD Viewer</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body data-mode="split">
+  <header class="toolbar">
+    <div class="group">
+      <button id="btn-new" title="Nuevo (Ctrl+N)">Nuevo</button>
+      <button id="btn-open" title="Abrir (Ctrl+O)">Abrir</button>
+      <button id="btn-save" title="Guardar (Ctrl+S)">Guardar</button>
+      <button id="btn-save-as" title="Guardar como (Ctrl+Shift+S)">Guardar como</button>
+    </div>
+    <div class="file" id="file-name">Sin título</div>
+    <div class="group modes" title="Cambiar vista (Ctrl+E)">
+      <button data-mode="edit">Editar</button>
+      <button data-mode="split">Dividido</button>
+      <button data-mode="view">Vista</button>
+    </div>
+  </header>
+
+  <main class="panes">
+    <textarea id="editor" spellcheck="false" placeholder="Escribe Markdown aquí..."></textarea>
+    <article id="preview" class="markdown"></article>
+  </main>
+
+  <footer class="status">
+    <span id="status-msg"></span>
+    <span id="status-count"></span>
+  </footer>
+
+  <script src="main.js"></script>
+</body>
+</html>
