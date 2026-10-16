@@ -27,10 +27,32 @@ function updateTitle() {
   appWindow.setTitle(`${mark}${name} — MD Viewer`);
 }
 
+const nf = new Intl.NumberFormat("es");
+let tokens = null; // null mientras se calcula
+let tokenSeq = 0;
+
 function updateCount() {
   const text = editor.value;
   const words = text.trim() ? text.trim().split(/\s+/).length : 0;
-  statusCount.textContent = `${words} palabras · ${text.length} caracteres`;
+  const tk = tokens === null ? "…" : nf.format(tokens);
+  statusCount.textContent = `${nf.format(words)} palabras · ${nf.format(text.length)} caracteres · ≈ ${tk} tokens`;
+}
+
+// Los tokens se calculan en Rust y con retraso, como la vista previa
+let tokenTimer;
+function scheduleTokens() {
+  clearTimeout(tokenTimer);
+  tokenTimer = setTimeout(async () => {
+    const seq = ++tokenSeq;
+    try {
+      const n = await invoke("count_tokens", { text: editor.value });
+      if (seq !== tokenSeq) return; // llegó tarde: ya hay un cálculo más reciente
+      tokens = n;
+    } catch {
+      tokens = null;
+    }
+    updateCount();
+  }, 250);
 }
 
 let statusTimer;
@@ -68,6 +90,7 @@ function loadDoc(doc) {
   editor.scrollTop = 0;
   preview.scrollTop = 0;
   render();
+  scheduleTokens();
   updateTitle();
   updateCount();
 }
@@ -145,11 +168,159 @@ document.querySelectorAll(".modes button").forEach((b) => (b.onclick = () => set
 // Barra de formato: mousedown sin foco para no perder la selección del editor
 document.querySelectorAll("[data-fmt]").forEach((b) => {
   b.onmousedown = (e) => e.preventDefault();
-  b.onclick = () => Format.apply(editor, b.dataset.fmt);
+  b.onclick = () => applyFormat(b.dataset.fmt);
+});
+
+function applyFormat(name) {
+  if (name === "link") openLinkDialog();
+  else Format.apply(editor, name);
+}
+
+// ---------- Diálogo de hipervínculo ----------
+
+const linkDialog = document.getElementById("link-dialog");
+const linkText = document.getElementById("link-text");
+const linkUrl = document.getElementById("link-url");
+let linkRange = null; // selección del editor al abrir el diálogo
+
+function openLinkDialog() {
+  const { value, selectionStart: s, selectionEnd: e } = editor;
+  const sel = value.slice(s, e);
+  linkRange = [s, e];
+  const isUrl = /^(https?:\/\/|mailto:|www\.)\S+$/i.test(sel.trim());
+  linkText.value = isUrl ? "" : sel;
+  linkUrl.value = isUrl ? sel.trim() : "";
+  linkUrl.classList.remove("invalid");
+  linkDialog.hidden = false;
+  (linkText.value ? linkUrl : linkText).focus();
+}
+
+function closeLinkDialog() {
+  linkDialog.hidden = true;
+  editor.focus();
+  if (linkRange) editor.setSelectionRange(...linkRange);
+  linkRange = null;
+}
+
+function confirmLink() {
+  if (!linkUrl.value.trim()) {
+    linkUrl.classList.add("invalid");
+    linkUrl.focus();
+    return;
+  }
+  const [s, e] = linkRange;
+  linkDialog.hidden = true;
+  linkRange = null;
+  Format.insertLink(editor, s, e, linkText.value, linkUrl.value);
+}
+
+linkDialog.addEventListener("submit", (e) => {
+  e.preventDefault();
+  confirmLink();
+});
+document.getElementById("link-cancel").onclick = closeLinkDialog;
+linkDialog.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") {
+    e.preventDefault();
+    closeLinkDialog();
+  }
+});
+linkUrl.addEventListener("input", () => linkUrl.classList.remove("invalid"));
+
+// ---------- Acerca de ----------
+
+const REPO = "fabian-co/md-viewer";
+const about = document.getElementById("about");
+const aboutUpdate = document.getElementById("about-update");
+const { getVersion, getTauriVersion } = window.__TAURI__.app;
+const appVersion = getVersion();
+
+document.getElementById("btn-about").onclick = async () => {
+  const [version, tauri] = await Promise.all([appVersion, getTauriVersion()]);
+  document.getElementById("about-version").textContent = `Versión ${version}`;
+  document.getElementById("about-tech").textContent = `Tauri ${tauri} + Rust`;
+  aboutUpdate.textContent = "";
+  aboutUpdate.className = "update";
+  about.showModal();
+};
+document.getElementById("about-close").onclick = () => about.close();
+document.getElementById("about-releases").onclick = () =>
+  invoke("open_url", { url: `https://github.com/${REPO}/releases` });
+about.addEventListener("click", (e) => {
+  const a = e.target.closest("a");
+  if (a) {
+    e.preventDefault();
+    invoke("open_url", { url: a.href });
+  } else if (e.target === about) {
+    about.close(); // clic fuera del cuadro
+  }
+});
+
+// Compara "1.2.0" con "1.10.0" numéricamente
+const newer = (a, b) => {
+  const pa = a.split(".").map(Number), pb = b.split(".").map(Number);
+  for (let i = 0; i < 3; i++) if ((pa[i] || 0) !== (pb[i] || 0)) return (pa[i] || 0) > (pb[i] || 0);
+  return false;
+};
+
+document.getElementById("about-check").onclick = async () => {
+  aboutUpdate.className = "update";
+  aboutUpdate.textContent = "Buscando…";
+  try {
+    const res = await fetch(`https://api.github.com/repos/${REPO}/releases/latest`);
+    if (!res.ok) throw new Error(res.status);
+    const latest = (await res.json()).tag_name.replace(/^v/, "");
+    if (newer(latest, await appVersion)) {
+      aboutUpdate.className = "update new";
+      aboutUpdate.textContent = `Hay una versión nueva: ${latest}. Descárgala en "Ver versiones".`;
+    } else {
+      aboutUpdate.textContent = "Tienes la última versión.";
+    }
+  } catch {
+    aboutUpdate.textContent = "No se pudo comprobar (¿sin conexión?).";
+  }
+};
+
+// ---------- Divisor arrastrable (modo dividido) ----------
+
+const panes = document.querySelector(".panes");
+const splitter = document.getElementById("splitter");
+const SPLIT_KEY = "md-viewer.split";
+
+function setSplit(ratio) {
+  const r = Math.min(0.85, Math.max(0.15, ratio));
+  panes.style.setProperty("--split", `${r * 100}%`);
+  return r;
+}
+
+try {
+  const saved = parseFloat(localStorage.getItem(SPLIT_KEY));
+  if (saved) setSplit(saved);
+} catch {}
+
+splitter.addEventListener("pointerdown", (e) => {
+  e.preventDefault();
+  splitter.setPointerCapture(e.pointerId);
+  document.body.classList.add("resizing");
+});
+splitter.addEventListener("pointermove", (e) => {
+  if (!splitter.hasPointerCapture(e.pointerId)) return;
+  const box = panes.getBoundingClientRect();
+  const r = setSplit((e.clientX - box.left) / box.width);
+  try { localStorage.setItem(SPLIT_KEY, r); } catch {}
+});
+const endDrag = () => document.body.classList.remove("resizing");
+splitter.addEventListener("pointerup", endDrag);
+splitter.addEventListener("lostpointercapture", endDrag);
+// Doble clic: volver a mitad y mitad
+splitter.addEventListener("dblclick", () => {
+  setSplit(0.5);
+  try { localStorage.removeItem(SPLIT_KEY); } catch {}
 });
 
 editor.addEventListener("input", () => {
   scheduleRender();
+  scheduleTokens();
   updateTitle();
   updateCount();
 });
@@ -190,7 +361,7 @@ document.addEventListener("keydown", (e) => {
     const fmt = Format.shortcut(e);
     if (fmt) {
       e.preventDefault();
-      Format.apply(editor, fmt);
+      applyFormat(fmt);
       return;
     }
   }

@@ -68,6 +68,13 @@ fn render_markdown(text: String) -> String {
     out
 }
 
+/// Tokens del texto con el tokenizador o200k_base (GPT-4o y posteriores).
+/// Es async para no bloquear la interfaz: la primera llamada carga el vocabulario.
+#[tauri::command]
+async fn count_tokens(text: String) -> usize {
+    tiktoken_rs::o200k_base_singleton().encode_ordinary(&text).len()
+}
+
 #[tauri::command]
 async fn open_dialog(app: AppHandle) -> Result<Option<Doc>, String> {
     let dialog = app.dialog().file().add_filter("Markdown", MD_EXTENSIONS);
@@ -142,6 +149,7 @@ pub fn run() {
             read_file,
             write_file,
             render_markdown,
+            count_tokens,
             open_dialog,
             save_as_dialog,
             open_url

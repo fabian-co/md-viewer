@@ -20,44 +20,76 @@
       <button data-mode="split">Dividido</button>
       <button data-mode="view">Vista</button>
     </div>
+    <button id="btn-about" class="icon-btn" title="Acerca de MD Viewer" aria-label="Acerca de">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5v.01"/></svg>
+    </button>
   </header>
 
-  <nav class="formatbar" aria-label="Formato">
-    <div class="group">
-      <button data-fmt="h1" title="Título 1 (Ctrl+1)">H1</button>
-      <button data-fmt="h2" title="Título 2 (Ctrl+2)">H2</button>
-      <button data-fmt="h3" title="Título 3 (Ctrl+3)">H3</button>
-    </div>
-    <div class="group">
-      <button data-fmt="bold" title="Negrita (Ctrl+B)"><b>B</b></button>
-      <button data-fmt="italic" title="Cursiva (Ctrl+I)"><i>I</i></button>
-      <button data-fmt="strike" title="Tachado (Ctrl+Shift+X)"><s>S</s></button>
-      <button data-fmt="code" title="Código en línea (Ctrl+Shift+C)"><code>&lt;/&gt;</code></button>
-    </div>
-    <div class="group">
-      <button data-fmt="ul" title="Lista con viñetas (Ctrl+Shift+8)">• Lista</button>
-      <button data-fmt="ol" title="Lista numerada (Ctrl+Shift+7)">1. Lista</button>
-      <button data-fmt="task" title="Lista de tareas">☑ Tareas</button>
-      <button data-fmt="quote" title="Cita (Ctrl+Shift+.)">❝ Cita</button>
-    </div>
-    <div class="group">
-      <button data-fmt="link" title="Enlace (Ctrl+K)">Enlace</button>
-      <button data-fmt="image" title="Imagen">Imagen</button>
-      <button data-fmt="codeblock" title="Bloque de código">{ } Código</button>
-      <button data-fmt="table" title="Tabla">Tabla</button>
-      <button data-fmt="hr" title="Línea horizontal">―</button>
-    </div>
-  </nav>
-
   <main class="panes">
-    <textarea id="editor" spellcheck="false" placeholder="Escribe Markdown aquí..."></textarea>
+    <section class="editor-pane">
+      <nav class="formatbar" aria-label="Formato">
+        <div class="group">
+          <button data-fmt="h1" title="Título 1 (Ctrl+1)">H1</button>
+          <button data-fmt="h2" title="Título 2 (Ctrl+2)">H2</button>
+          <button data-fmt="h3" title="Título 3 (Ctrl+3)">H3</button>
+        </div>
+        <div class="group">
+          <button data-fmt="bold" title="Negrita (Ctrl+B)"><b>B</b></button>
+          <button data-fmt="italic" title="Cursiva (Ctrl+I)"><i>I</i></button>
+          <button data-fmt="strike" title="Tachado (Ctrl+Shift+X)"><s>S</s></button>
+          <button data-fmt="code" title="Código en línea (Ctrl+Shift+C)"><code>&lt;/&gt;</code></button>
+        </div>
+        <div class="group">
+          <button data-fmt="ul" title="Lista con viñetas (Ctrl+Shift+8)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6h11M9 12h11M9 18h11"/><circle cx="4.5" cy="6" r="1"/><circle cx="4.5" cy="12" r="1"/><circle cx="4.5" cy="18" r="1"/></svg></button>
+          <button data-fmt="ol" title="Lista numerada (Ctrl+Shift+7)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 6h10M10 12h10M10 18h10M4 5h1.5v4M4 9h3M4 14.5c0-1 2.8-1 2.8.3 0 1-2.8 2-2.8 3.2h3"/></svg></button>
+          <button data-fmt="task" title="Lista de tareas"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="4" width="6" height="6" rx="1"/><path d="m4.8 7 1.4 1.4 2.4-2.6M13 7h8M3.5 14h6v6h-6zM13 17h8"/></svg></button>
+          <button data-fmt="quote" title="Cita (Ctrl+Shift+.)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6v12M9 8h11M9 12h11M9 16h7"/></svg></button>
+        </div>
+        <div class="group">
+          <button data-fmt="link" title="Hipervínculo (Ctrl+K)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 14a4.5 4.5 0 0 0 6.4 0l3-3a4.5 4.5 0 0 0-6.4-6.4l-1 1M14 10a4.5 4.5 0 0 0-6.4 0l-3 3a4.5 4.5 0 0 0 6.4 6.4l1-1"/></svg></button>
+          <button data-fmt="image" title="Imagen"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="1.6"/><path d="m21 16-5-5-9 9"/></svg></button>
+          <button data-fmt="codeblock" title="Bloque de código"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="m9.5 9.5-2.5 2.5 2.5 2.5M14.5 9.5l2.5 2.5-2.5 2.5"/></svg></button>
+          <button data-fmt="table" title="Tabla"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18M3 15h18M10 4v16"/></svg></button>
+          <button data-fmt="hr" title="Línea horizontal"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12h18"/></svg></button>
+        </div>
+      </nav>
+      <form class="link-dialog" id="link-dialog" hidden>
+        <label>Texto <input id="link-text" type="text" placeholder="Texto que se mostrará" autocomplete="off" /></label>
+        <label>URL <input id="link-url" type="text" placeholder="https://ejemplo.com" autocomplete="off" spellcheck="false" /></label>
+        <div class="actions">
+          <button type="button" id="link-cancel">Cancelar</button>
+          <button type="submit" class="primary">Insertar</button>
+        </div>
+      </form>
+      <textarea id="editor" spellcheck="false" placeholder="Escribe Markdown aquí..."></textarea>
+    </section>
+    <div class="splitter" id="splitter" title="Arrastra para cambiar el tamaño (doble clic: mitad y mitad)"></div>
     <article id="preview" class="markdown"></article>
   </main>
 
   <footer class="status">
     <span id="status-msg"></span>
-    <span id="status-count"></span>
+    <span id="status-count" title="Tokens aproximados para un LLM, calculados con el tokenizador de GPT-4o (o200k). Otros modelos como Claude o Gemini usan tokenizadores distintos y el número puede variar."></span>
   </footer>
+
+  <dialog class="about" id="about">
+    <img src="icon.png" alt="" width="72" height="72" />
+    <h2>MD Viewer</h2>
+    <p class="version" id="about-version">Versión</p>
+    <p>Visor y editor sencillo de Markdown para Windows, macOS y Linux.</p>
+    <p class="update" id="about-update"></p>
+    <dl>
+      <dt>Autor</dt><dd>Fabian Grajales</dd>
+      <dt>Código</dt><dd><a href="https://github.com/fabian-co/md-viewer">github.com/fabian-co/md-viewer</a></dd>
+      <dt>Hecho con</dt><dd id="about-tech">Tauri + Rust</dd>
+      <dt>Tokens</dt><dd>Tokenizador o200k (GPT-4o), aproximado para otros modelos</dd>
+    </dl>
+    <div class="actions">
+      <button id="about-check">Buscar actualizaciones</button>
+      <button id="about-releases">Ver versiones</button>
+      <button id="about-close" class="primary" autofocus>Cerrar</button>
+    </div>
+  </dialog>
 
   <script src="format.js"></script>
   <script src="main.js"></script>

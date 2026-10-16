@@ -143,6 +143,15 @@ const Format = (() => {
     }
   }
 
+  // Inserta [texto](url) en [start, end) y deja el cursor detrás
+  function insertLink(ed, start, end, label, url) {
+    url = url.trim();
+    if (/^www\./i.test(url)) url = "https://" + url;
+    if (/\s/.test(url)) url = `<${url}>`; // las URLs con espacios van entre <>
+    label = (label.trim() || url).replace(/([[\]])/g, "\\$1");
+    replace(ed, start, end, `[${label}](${url})`);
+  }
+
   const actions = {
     h1: (ed) => heading(ed, 1),
     h2: (ed) => heading(ed, 2),
@@ -181,6 +190,7 @@ const Format = (() => {
 
   return {
     apply: (ed, name) => actions[name]?.(ed),
+    insertLink,
     shortcut: (e) => (e.shiftKey ? SHIFT_SHORTCUTS : SHORTCUTS)[e.code] ?? null,
   };
 })();
