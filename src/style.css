@@ -324,3 +324,28 @@ body[data-mode="view"] .markdown {
 .markdown img { max-width: 100%; }
 .markdown hr { border: none; border-top: 1px solid var(--border); margin: 2em 0; }
 .markdown ul:has(> li > input[type="checkbox"]) { list-style: none; padding-left: 1.2em; }
+.markdown input[type="checkbox"] {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 1.05em;
+  height: 1.05em;
+  margin: 0 0.45em 0 0;
+  vertical-align: -0.15em;
+  border: 2px solid var(--accent);
+  border-radius: 4px;
+  background: transparent;
+  opacity: 1;
+  position: relative;
+}
+.markdown input[type="checkbox"]:checked { background: var(--accent); }
+.markdown input[type="checkbox"]:checked::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 45%;
+  width: 0.28em;
+  height: 0.55em;
+  border: solid #fff;
+  border-width: 0 2px 2px 0;
+  transform: translate(-50%, -50%) rotate(45deg);
+}

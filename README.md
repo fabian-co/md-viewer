@@ -29,16 +29,16 @@ Visor y editor sencillo de archivos Markdown hecho con Tauri 2 + Rust. Funciona 
 
 ## Descargas
 
-Última versión: **[v1.2.0](https://github.com/fabian-co/md-viewer/releases/latest)**
+Última versión: **[v1.2.1](https://github.com/fabian-co/md-viewer/releases/latest)**
 
 | Sistema | Descarga |
 |---------|----------|
-| Windows | [Instalador `.exe`](https://github.com/fabian-co/md-viewer/releases/download/v1.2.0/MD.Viewer_1.2.0_x64-setup.exe) · [`.msi`](https://github.com/fabian-co/md-viewer/releases/download/v1.2.0/MD.Viewer_1.2.0_x64_en-US.msi) |
-| macOS (Apple Silicon M1/M2/M3…) | [`.dmg`](https://github.com/fabian-co/md-viewer/releases/download/v1.2.0/MD.Viewer_1.2.0_aarch64.dmg) |
-| macOS (Intel) | [`.dmg`](https://github.com/fabian-co/md-viewer/releases/download/v1.2.0/MD.Viewer_1.2.0_x64.dmg) |
-| Linux (Debian/Ubuntu) | [`.deb`](https://github.com/fabian-co/md-viewer/releases/download/v1.2.0/MD.Viewer_1.2.0_amd64.deb) |
-| Linux (Fedora/openSUSE) | [`.rpm`](https://github.com/fabian-co/md-viewer/releases/download/v1.2.0/MD.Viewer-1.2.0-1.x86_64.rpm) |
-| Linux (cualquier distro) | [`.AppImage`](https://github.com/fabian-co/md-viewer/releases/download/v1.2.0/MD.Viewer_1.2.0_amd64.AppImage) |
+| Windows | [Instalador `.exe`](https://github.com/fabian-co/md-viewer/releases/download/v1.2.1/MD.Viewer_1.2.1_x64-setup.exe) · [`.msi`](https://github.com/fabian-co/md-viewer/releases/download/v1.2.1/MD.Viewer_1.2.1_x64_en-US.msi) |
+| macOS (Apple Silicon M1/M2/M3…) | [`.dmg`](https://github.com/fabian-co/md-viewer/releases/download/v1.2.1/MD.Viewer_1.2.1_aarch64.dmg) |
+| macOS (Intel) | [`.dmg`](https://github.com/fabian-co/md-viewer/releases/download/v1.2.1/MD.Viewer_1.2.1_x64.dmg) |
+| Linux (Debian/Ubuntu) | [`.deb`](https://github.com/fabian-co/md-viewer/releases/download/v1.2.1/MD.Viewer_1.2.1_amd64.deb) |
+| Linux (Fedora/openSUSE) | [`.rpm`](https://github.com/fabian-co/md-viewer/releases/download/v1.2.1/MD.Viewer-1.2.1-1.x86_64.rpm) |
+| Linux (cualquier distro) | [`.AppImage`](https://github.com/fabian-co/md-viewer/releases/download/v1.2.1/MD.Viewer_1.2.1_amd64.AppImage) |
 
 Todas las versiones están en la pestaña [Releases](https://github.com/fabian-co/md-viewer/releases).
 
@@ -63,4 +63,4 @@ npm run dev     # modo desarrollo
 npm run build   # instaladores en src-tauri/target/release/bundle/
 ```
 
-Para publicar una versión: `git tag v1.2.0 && git push --tags` crea un release con los instaladores de los tres sistemas.
+Para publicar una versión: `git tag v1.2.1 && git push --tags` crea un release con los instaladores de los tres sistemas.
