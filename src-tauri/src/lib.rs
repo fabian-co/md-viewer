@@ -1,9 +1,12 @@
 use std::path::{Path, PathBuf};
-use std::sync::Mutex;
+use std::sync::{mpsc, Mutex};
+use std::time::Duration;
+
+use notify::{EventKind, RecursiveMode, Watcher};
 
 use pulldown_cmark::{html, Options, Parser};
 use serde::Serialize;
-use tauri::{AppHandle, State};
+use tauri::{AppHandle, Emitter, State};
 use tauri_plugin_dialog::DialogExt;
 use tauri_plugin_opener::OpenerExt;
 
@@ -18,7 +21,10 @@ struct Startup {
     ready: bool,
 }
 
-#[derive(Serialize)]
+/// Vigilante del archivo abierto, para recargarlo cuando otro programa (un editor, una IA) lo modifica.
+struct FileWatch(Mutex<Option<notify::RecommendedWatcher>>);
+
+#[derive(Serialize, Clone)]
 struct Doc {
     path: String,
     content: String,
@@ -52,6 +58,63 @@ fn read_file(path: String) -> Result<Doc, String> {
 #[tauri::command]
 fn write_file(path: String, content: String) -> Result<(), String> {
     std::fs::write(&path, content).map_err(|e| format!("No se pudo guardar {path}: {e}"))
+}
+
+/// Empieza a vigilar `path` (o deja de vigilar si es `None`) y emite `file-changed` con el contenido nuevo.
+/// Se vigila la carpeta y no el archivo: muchos programas guardan escribiendo un temporal y renombrándolo,
+/// y eso rompe la vigilancia directa del archivo.
+#[tauri::command]
+fn watch_file(app: AppHandle, state: State<FileWatch>, path: Option<String>) -> Result<(), String> {
+    let mut slot = state.0.lock().unwrap();
+    // Soltar el vigilante anterior cierra su canal y termina su hilo
+    *slot = None;
+    let Some(path) = path else { return Ok(()) };
+    let target = PathBuf::from(path);
+    let (Some(dir), Some(name)) = (target.parent(), target.file_name()) else {
+        return Err("Ruta no válida".into());
+    };
+    let dir = dir.to_path_buf();
+    // Sin distinguir mayúsculas: Windows y macOS no lo hacen; si sobra un evento, la interfaz lo descarta
+    let name = name.to_string_lossy().to_lowercase();
+
+    let (tx, rx) = mpsc::channel();
+    let mut watcher = notify::recommended_watcher(move |res: notify::Result<notify::Event>| {
+        let Ok(event) = res else { return };
+        if matches!(event.kind, EventKind::Access(_)) {
+            return;
+        }
+        let ours = event
+            .paths
+            .iter()
+            .any(|p| p.file_name().is_some_and(|n| n.to_string_lossy().to_lowercase() == name));
+        if ours {
+            let _ = tx.send(());
+        }
+    })
+    .map_err(|e| e.to_string())?;
+    watcher
+        .watch(&dir, RecursiveMode::NonRecursive)
+        .map_err(|e| format!("No se pudo vigilar {}: {e}", dir.display()))?;
+
+    std::thread::spawn(move || {
+        while rx.recv().is_ok() {
+            // Un guardado produce varios eventos seguidos: se espera a que paren y se lee una sola vez
+            loop {
+                match rx.recv_timeout(Duration::from_millis(50)) {
+                    Ok(()) => continue,
+                    Err(mpsc::RecvTimeoutError::Timeout) => break,
+                    Err(mpsc::RecvTimeoutError::Disconnected) => return,
+                }
+            }
+            // Si falla (archivo a medio renombrar), llegará otro evento cuando aparezca
+            if let Ok(doc) = read_doc(&target) {
+                let _ = app.emit("file-changed", doc);
+            }
+        }
+    });
+
+    *slot = Some(watcher);
+    Ok(())
 }
 
 #[tauri::command]
@@ -144,10 +207,12 @@ pub fn run() {
             path: file_from_args(),
             ready: false,
         })))
+        .manage(FileWatch(Mutex::new(None)))
         .invoke_handler(tauri::generate_handler![
             startup_file,
             read_file,
             write_file,
+            watch_file,
             render_markdown,
             count_tokens,
             open_dialog,

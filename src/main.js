@@ -72,6 +72,11 @@ async function render() {
   preview.innerHTML = await invoke("render_markdown", { text: editor.value });
 }
 
+// Vigila el archivo abierto en disco (null deja de vigilar)
+function watch(path) {
+  invoke("watch_file", { path }).catch((e) => console.warn(e));
+}
+
 function setMode(mode) {
   document.body.dataset.mode = mode;
   document.querySelectorAll(".modes button").forEach((b) =>
@@ -90,6 +95,31 @@ function loadDoc(doc) {
   editor.scrollTop = 0;
   preview.scrollTop = 0;
   render();
+  scheduleTokens();
+  updateTitle();
+  updateCount();
+  watch(doc.path);
+}
+
+// Otro programa (un editor, una IA) modificó el archivo: recargar sin perder el scroll ni el cursor
+async function reloadFromDisk(doc) {
+  if (doc.path !== state.path) return;
+  const content = doc.content.replace(/\r\n?/g, "\n");
+  if (content === state.saved) return; // nuestro propio guardado o un cambio sin contenido nuevo
+  if (isDirty() && editor.value !== content &&
+      !confirm("El archivo cambió en disco. ¿Recargarlo y descartar tus cambios sin guardar?")) {
+    return;
+  }
+  const { selectionStart, selectionEnd, scrollTop } = editor;
+  const previewTop = preview.scrollTop;
+  state.crlf = doc.content.includes("\r\n");
+  state.saved = content;
+  editor.value = content;
+  editor.setSelectionRange(selectionStart, selectionEnd);
+  editor.scrollTop = scrollTop;
+  clearTimeout(renderTimer);
+  await render();
+  preview.scrollTop = previewTop;
   scheduleTokens();
   updateTitle();
   updateCount();
@@ -150,6 +180,7 @@ async function saveAs() {
     if (!path) return;
     state.path = path;
     state.saved = content;
+    watch(path);
     updateTitle();
     flash("Guardado");
   } catch (e) {
@@ -382,6 +413,9 @@ listen("tauri://drag-drop", (event) => {
   const path = event.payload?.paths?.[0];
   if (path) openPath(path);
 });
+
+// Cambios hechos al archivo abierto desde fuera de la app
+listen("file-changed", (event) => reloadFromDisk(event.payload));
 
 // macOS: archivo abierto desde Finder con la app ya en marcha
 listen("open-file", (event) => openPath(event.payload));
