@@ -25,6 +25,11 @@
     </button>
   </header>
 
+  <nav class="tabs" id="tabs" aria-label="Documentos abiertos">
+    <div class="tab-list" id="tab-list" role="tablist"></div>
+    <button id="btn-new-tab" class="tab-add" title="Nueva pestaña (Ctrl+T)" aria-label="Nueva pestaña">+</button>
+  </nav>
+
   <main class="panes">
     <section class="editor-pane">
       <nav class="formatbar" aria-label="Formato">
@@ -61,7 +66,7 @@
           <button type="submit" class="primary">Insertar</button>
         </div>
       </form>
-      <textarea id="editor" spellcheck="false" placeholder="Escribe Markdown aquí..."></textarea>
+      <div class="editors" id="editors"></div>
     </section>
     <div class="splitter" id="splitter" title="Arrastra para cambiar el tamaño (doble clic: mitad y mitad)"></div>
     <article id="preview" class="markdown"></article>

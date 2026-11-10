@@ -2,29 +2,145 @@ const { invoke } = window.__TAURI__.core;
 const { listen } = window.__TAURI__.event;
 const appWindow = window.__TAURI__.window.getCurrentWindow();
 
-const editor = document.getElementById("editor");
+const editorsEl = document.getElementById("editors");
+const tabList = document.getElementById("tab-list");
 const preview = document.getElementById("preview");
 const fileNameEl = document.getElementById("file-name");
 const statusMsg = document.getElementById("status-msg");
 const statusCount = document.getElementById("status-count");
 
-const state = {
-  path: null,
-  saved: "",
-  crlf: false, // conservar saltos de línea de Windows al guardar
-};
-
 const isMac = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
-const isDirty = () => editor.value !== state.saved;
+const isWin = /Win/.test(navigator.platform || navigator.userAgent);
 const baseName = (p) => (p ? p.split(/[\\/]/).pop() : "Sin título");
+// Windows no distingue mayúsculas ni el tipo de barra en las rutas
+const normPath = (p) => (isWin ? p.replace(/\//g, "\\").toLowerCase() : p);
+const samePath = (a, b) => !!a && !!b && normPath(a) === normPath(b);
+
+// ---------- Pestañas ----------
+// Cada pestaña tiene su propio textarea (así conserva su historial de deshacer, cursor y scroll);
+// la vista previa es una sola y se vuelve a generar al cambiar de pestaña.
+
+/** @type {{id:number, path:string|null, saved:string, crlf:boolean, mode:string, el:HTMLTextAreaElement, tabEl:HTMLElement, editorTop:number, previewTop:number}[]} */
+const tabs = [];
+let current = null; // pestaña activa
+let editor = null; // textarea de la pestaña activa
+let nextId = 1;
+
+const isDirty = (tab = current) => tab.el.value !== tab.saved;
+// Pestaña vacía y sin tocar: abrir un archivo la reutiliza en lugar de dejarla huérfana
+const isBlank = (tab) => !tab.path && !tab.el.value && !tab.saved;
+
+function createTab({ path = null, content = "", mode = "split" } = {}) {
+  const el = document.createElement("textarea");
+  el.className = "editor";
+  el.spellcheck = false;
+  el.placeholder = "Escribe Markdown aquí...";
+  el.hidden = true;
+  editorsEl.append(el);
+
+  const tabEl = document.createElement("div");
+  tabEl.className = "tab";
+  tabEl.setAttribute("role", "tab");
+  tabEl.innerHTML = '<span class="tab-name"></span><button class="tab-close" tabindex="-1" aria-label="Cerrar pestaña">×</button>';
+  tabList.append(tabEl);
+
+  const tab = { id: nextId++, path: null, saved: "", crlf: false, mode, el, tabEl, editorTop: 0, previewTop: 0 };
+  tabs.push(tab);
+  setContent(tab, path, content);
+
+  tabEl.addEventListener("mousedown", (e) => {
+    if (e.button === 1) e.preventDefault(); // evita el autoscroll del botón central
+  });
+  tabEl.addEventListener("click", (e) => {
+    if (e.target.closest(".tab-close")) closeTab(tab);
+    else activate(tab);
+  });
+  tabEl.addEventListener("auxclick", (e) => {
+    if (e.button === 1) closeTab(tab); // clic central cierra
+  });
+  attachEditor(tab);
+  return tab;
+}
+
+function setContent(tab, path, content) {
+  tab.path = path;
+  tab.crlf = content.includes("\r\n");
+  tab.saved = content.replace(/\r\n?/g, "\n");
+  tab.el.value = tab.saved;
+  tab.editorTop = 0;
+  tab.previewTop = 0;
+  updateTabLabel(tab);
+}
+
+function updateTabLabel(tab) {
+  tab.tabEl.querySelector(".tab-name").textContent = baseName(tab.path);
+  tab.tabEl.title = tab.path || "Sin título";
+  tab.tabEl.classList.toggle("dirty", isDirty(tab));
+}
+
+function activate(tab) {
+  if (current === tab) return;
+  if (current) {
+    current.editorTop = current.el.scrollTop;
+    current.previewTop = preview.scrollTop;
+    current.el.hidden = true;
+    current.tabEl.classList.remove("active");
+    current.tabEl.setAttribute("aria-selected", "false");
+  }
+  current = tab;
+  editor = tab.el;
+  editor.hidden = false;
+  editor.scrollTop = tab.editorTop;
+  tab.tabEl.classList.add("active");
+  tab.tabEl.setAttribute("aria-selected", "true");
+  tab.tabEl.scrollIntoView({ block: "nearest", inline: "nearest" });
+  if (!linkDialog.hidden) closeLinkDialog();
+  applyMode(tab.mode);
+  clearTimeout(renderTimer);
+  render().then(() => (preview.scrollTop = tab.previewTop));
+  tokens = null;
+  scheduleTokens();
+  updateTitle();
+  updateCount();
+  if (tab.mode !== "view") editor.focus();
+}
+
+async function closeTab(tab) {
+  if (isDirty(tab)) {
+    activate(tab);
+    if (!confirm(`«${baseName(tab.path)}» tiene cambios sin guardar. ¿Cerrar y descartarlos?`)) return;
+  }
+  const i = tabs.indexOf(tab);
+  tabs.splice(i, 1);
+  tab.el.remove();
+  tab.tabEl.remove();
+  if (current === tab) {
+    current = null;
+    // Siempre queda al menos una pestaña
+    activate(tabs[Math.min(i, tabs.length - 1)] || createTab());
+  }
+  syncWatch();
+}
+
+function cycleTab(step) {
+  const i = tabs.indexOf(current);
+  activate(tabs[(i + step + tabs.length) % tabs.length]);
+}
+
+// Vigila en disco los archivos de todas las pestañas
+function syncWatch() {
+  const paths = [...new Set(tabs.map((t) => t.path).filter(Boolean))];
+  invoke("watch_files", { paths }).catch((e) => console.warn(e));
+}
 
 // ---------- Interfaz ----------
 
 function updateTitle() {
-  const name = baseName(state.path);
+  const name = baseName(current.path);
   const mark = isDirty() ? "• " : "";
-  fileNameEl.textContent = mark + (state.path || "Sin título");
+  fileNameEl.textContent = mark + (current.path || "Sin título");
   appWindow.setTitle(`${mark}${name} — MD Viewer`);
+  updateTabLabel(current);
 }
 
 const nf = new Intl.NumberFormat("es");
@@ -68,55 +184,71 @@ function scheduleRender() {
   renderTimer = setTimeout(render, 120);
 }
 
+let renderSeq = 0;
 async function render() {
-  preview.innerHTML = await invoke("render_markdown", { text: editor.value });
+  const seq = ++renderSeq;
+  const html = await invoke("render_markdown", { text: editor.value });
+  if (seq === renderSeq) preview.innerHTML = html; // descarta resultados de otra pestaña
 }
 
-// Vigila el archivo abierto en disco (null deja de vigilar)
-function watch(path) {
-  invoke("watch_file", { path }).catch((e) => console.warn(e));
-}
-
-function setMode(mode) {
+function applyMode(mode) {
   document.body.dataset.mode = mode;
   document.querySelectorAll(".modes button").forEach((b) =>
     b.classList.toggle("active", b.dataset.mode === mode)
   );
 }
 
-// El textarea siempre usa "\n"; al guardar se restaura "\r\n" si el archivo lo usaba
-const toDisk = (text) => (state.crlf ? text.replace(/\n/g, "\r\n") : text);
-
-function loadDoc(doc) {
-  state.path = doc.path;
-  state.crlf = doc.content.includes("\r\n");
-  state.saved = doc.content.replace(/\r\n?/g, "\n");
-  editor.value = state.saved;
-  editor.scrollTop = 0;
-  preview.scrollTop = 0;
-  render();
-  scheduleTokens();
-  updateTitle();
-  updateCount();
-  watch(doc.path);
+function setMode(mode) {
+  current.mode = mode;
+  applyMode(mode);
 }
 
-// Otro programa (un editor, una IA) modificó el archivo: recargar sin perder el scroll ni el cursor
+// El textarea siempre usa "\n"; al guardar se restaura "\r\n" si el archivo lo usaba
+const toDisk = (tab, text) => (tab.crlf ? text.replace(/\n/g, "\r\n") : text);
+
+// Abre un documento en una pestaña: si ya está abierto la activa, si la actual está vacía la reutiliza
+function openInTab(doc, mode) {
+  const existing = doc.path && tabs.find((t) => samePath(t.path, doc.path));
+  if (existing) {
+    activate(existing);
+    return existing;
+  }
+  let tab;
+  if (current && isBlank(current)) {
+    tab = current;
+    setContent(tab, doc.path, doc.content);
+    tab.mode = mode;
+    current = null; // fuerza a refrescar la vista
+  } else {
+    tab = createTab({ path: doc.path, content: doc.content, mode });
+  }
+  activate(tab);
+  syncWatch();
+  return tab;
+}
+
+// Otro programa (un editor, una IA) modificó un archivo abierto: recargar sin perder el scroll ni el cursor
 async function reloadFromDisk(doc) {
-  if (doc.path !== state.path) return;
+  const tab = tabs.find((t) => t.path === doc.path);
+  if (!tab) return;
   const content = doc.content.replace(/\r\n?/g, "\n");
-  if (content === state.saved) return; // nuestro propio guardado o un cambio sin contenido nuevo
-  if (isDirty() && editor.value !== content &&
-      !confirm("El archivo cambió en disco. ¿Recargarlo y descartar tus cambios sin guardar?")) {
+  if (content === tab.saved) return; // nuestro propio guardado o un cambio sin contenido nuevo
+  if (isDirty(tab) && tab.el.value !== content &&
+      !confirm(`«${baseName(tab.path)}» cambió en disco. ¿Recargarlo y descartar tus cambios sin guardar?`)) {
     return;
   }
-  const { selectionStart, selectionEnd, scrollTop } = editor;
+  const el = tab.el;
+  const { selectionStart, selectionEnd } = el;
+  const active = tab === current;
+  const scrollTop = active ? el.scrollTop : tab.editorTop;
+  tab.crlf = doc.content.includes("\r\n");
+  tab.saved = content;
+  el.value = content;
+  el.setSelectionRange(selectionStart, selectionEnd);
+  updateTabLabel(tab);
+  if (!active) return; // se renderiza al activarla
+  el.scrollTop = scrollTop;
   const previewTop = preview.scrollTop;
-  state.crlf = doc.content.includes("\r\n");
-  state.saved = content;
-  editor.value = content;
-  editor.setSelectionRange(selectionStart, selectionEnd);
-  editor.scrollTop = scrollTop;
   clearTimeout(renderTimer);
   await render();
   preview.scrollTop = previewTop;
@@ -125,44 +257,39 @@ async function reloadFromDisk(doc) {
   updateCount();
 }
 
-function confirmDiscard() {
-  return !isDirty() || confirm("Hay cambios sin guardar. ¿Descartarlos?");
-}
-
 // ---------- Acciones ----------
 
-async function newDoc() {
-  if (!confirmDiscard()) return;
-  loadDoc({ path: null, content: "" });
-  setMode("split");
+function newDoc() {
+  activate(createTab());
   editor.focus();
 }
 
 async function openDoc() {
-  if (!confirmDiscard()) return;
   try {
     const doc = await invoke("open_dialog");
-    if (doc) loadDoc(doc);
+    if (doc) openInTab(doc, "split");
   } catch (e) {
     alert(e);
   }
 }
 
-async function openPath(path) {
-  if (!confirmDiscard()) return;
+async function openPath(path, mode = "split") {
+  const existing = tabs.find((t) => samePath(t.path, path));
+  if (existing) return activate(existing);
   try {
-    loadDoc(await invoke("read_file", { path }));
+    openInTab(await invoke("read_file", { path }), mode);
   } catch (e) {
     alert(e);
   }
 }
 
 async function save() {
-  if (!state.path) return saveAs();
+  const tab = current;
+  if (!tab.path) return saveAs();
   try {
-    const content = editor.value;
-    await invoke("write_file", { path: state.path, content: toDisk(content) });
-    state.saved = content;
+    const content = tab.el.value;
+    await invoke("write_file", { path: tab.path, content: toDisk(tab, content) });
+    tab.saved = content;
     updateTitle();
     flash("Guardado");
   } catch (e) {
@@ -171,17 +298,19 @@ async function save() {
 }
 
 async function saveAs() {
+  const tab = current;
   try {
-    const content = editor.value;
+    const content = tab.el.value;
     const path = await invoke("save_as_dialog", {
-      content: toDisk(content),
-      suggested: state.path ? baseName(state.path) : null,
+      content: toDisk(tab, content),
+      suggested: tab.path ? baseName(tab.path) : null,
     });
     if (!path) return;
-    state.path = path;
-    state.saved = content;
-    watch(path);
-    updateTitle();
+    tab.path = path;
+    tab.saved = content;
+    syncWatch();
+    if (tab === current) updateTitle();
+    else updateTabLabel(tab);
     flash("Guardado");
   } catch (e) {
     alert(e);
@@ -191,10 +320,23 @@ async function saveAs() {
 // ---------- Eventos ----------
 
 document.getElementById("btn-new").onclick = newDoc;
+document.getElementById("btn-new-tab").onclick = newDoc;
 document.getElementById("btn-open").onclick = openDoc;
 document.getElementById("btn-save").onclick = save;
 document.getElementById("btn-save-as").onclick = saveAs;
 document.querySelectorAll(".modes button").forEach((b) => (b.onclick = () => setMode(b.dataset.mode)));
+
+// Doble clic en el espacio libre de la barra de pestañas: nueva pestaña
+document.getElementById("tabs").addEventListener("dblclick", (e) => {
+  if (!e.target.closest(".tab, button")) newDoc();
+});
+// La rueda del ratón desplaza las pestañas en horizontal
+tabList.addEventListener("wheel", (e) => {
+  if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) {
+    tabList.scrollLeft += e.deltaY;
+    e.preventDefault();
+  }
+}, { passive: false });
 
 // Barra de formato: mousedown sin foco para no perder la selección del editor
 document.querySelectorAll("[data-fmt]").forEach((b) => {
@@ -349,27 +491,31 @@ splitter.addEventListener("dblclick", () => {
   try { localStorage.removeItem(SPLIT_KEY); } catch {}
 });
 
-editor.addEventListener("input", () => {
-  scheduleRender();
-  scheduleTokens();
-  updateTitle();
-  updateCount();
-});
+// Eventos de cada textarea (se llaman al crear la pestaña)
+function attachEditor(tab) {
+  const el = tab.el;
+  el.addEventListener("input", () => {
+    scheduleRender();
+    scheduleTokens();
+    updateTitle();
+    updateCount();
+  });
 
-// Tab inserta espacios en lugar de cambiar el foco
-editor.addEventListener("keydown", (e) => {
-  if (e.key === "Tab" && !e.ctrlKey && !e.metaKey) {
-    e.preventDefault();
-    document.execCommand("insertText", false, "  ");
-  }
-});
+  // Tab inserta espacios en lugar de cambiar el foco
+  el.addEventListener("keydown", (e) => {
+    if (e.key === "Tab" && !e.ctrlKey && !e.metaKey) {
+      e.preventDefault();
+      document.execCommand("insertText", false, "  ");
+    }
+  });
 
-// Sincroniza el scroll de la vista previa con el editor (proporcional)
-editor.addEventListener("scroll", () => {
-  if (document.body.dataset.mode !== "split") return;
-  const ratio = editor.scrollTop / Math.max(1, editor.scrollHeight - editor.clientHeight);
-  preview.scrollTop = ratio * (preview.scrollHeight - preview.clientHeight);
-});
+  // Sincroniza el scroll de la vista previa con el editor (proporcional)
+  el.addEventListener("scroll", () => {
+    if (el !== editor || document.body.dataset.mode !== "split") return;
+    const ratio = el.scrollTop / Math.max(1, el.scrollHeight - el.clientHeight);
+    preview.scrollTop = ratio * (preview.scrollHeight - preview.clientHeight);
+  });
+}
 
 // Los enlaces se abren en el navegador del sistema
 preview.addEventListener("click", (e) => {
@@ -386,6 +532,12 @@ preview.addEventListener("click", (e) => {
 
 const modes = ["edit", "split", "view"];
 document.addEventListener("keydown", (e) => {
+  // Ctrl+Tab / Ctrl+Shift+Tab cambian de pestaña en todos los sistemas
+  if (e.ctrlKey && e.key === "Tab") {
+    e.preventDefault();
+    cycleTab(e.shiftKey ? -1 : 1);
+    return;
+  }
   // Cmd en macOS, Ctrl en Windows y Linux
   if (!(isMac ? e.metaKey : e.ctrlKey) || e.altKey) return;
   if (document.activeElement === editor) {
@@ -400,7 +552,10 @@ document.addEventListener("keydown", (e) => {
   if (k === "s" && e.shiftKey) { e.preventDefault(); saveAs(); }
   else if (k === "s") { e.preventDefault(); save(); }
   else if (k === "o") { e.preventDefault(); openDoc(); }
-  else if (k === "n") { e.preventDefault(); newDoc(); }
+  else if (k === "n" || k === "t") { e.preventDefault(); newDoc(); }
+  else if (k === "w") { e.preventDefault(); closeTab(current); }
+  else if (e.key === "PageDown") { e.preventDefault(); cycleTab(1); }
+  else if (e.key === "PageUp") { e.preventDefault(); cycleTab(-1); }
   else if (k === "e") {
     e.preventDefault();
     const i = modes.indexOf(document.body.dataset.mode);
@@ -408,21 +563,25 @@ document.addEventListener("keydown", (e) => {
   }
 });
 
-// Arrastrar y soltar archivos sobre la ventana
-listen("tauri://drag-drop", (event) => {
-  const path = event.payload?.paths?.[0];
-  if (path) openPath(path);
+// Arrastrar y soltar archivos sobre la ventana: cada uno en su pestaña
+listen("tauri://drag-drop", async (event) => {
+  for (const path of event.payload?.paths || []) await openPath(path);
 });
 
-// Cambios hechos al archivo abierto desde fuera de la app
+// Cambios hechos a un archivo abierto desde fuera de la app
 listen("file-changed", (event) => reloadFromDisk(event.payload));
 
-// macOS: archivo abierto desde Finder con la app ya en marcha
-listen("open-file", (event) => openPath(event.payload));
+// Archivo abierto desde el Explorador o Finder con la app ya en marcha: pestaña nueva
+listen("open-file", (event) => openPath(event.payload, "view"));
 
 // Avisar de cambios sin guardar al cerrar
 appWindow.onCloseRequested((event) => {
-  if (!confirmDiscard()) event.preventDefault();
+  const dirty = tabs.filter((t) => isDirty(t));
+  if (!dirty.length) return;
+  const msg = dirty.length === 1
+    ? `«${baseName(dirty[0].path)}» tiene cambios sin guardar. ¿Salir y descartarlos?`
+    : `Hay ${dirty.length} pestañas con cambios sin guardar. ¿Salir y descartarlos?`;
+  if (!confirm(msg)) event.preventDefault();
 });
 
 // ---------- Inicio ----------
@@ -435,17 +594,16 @@ if (isMac) {
 }
 
 (async () => {
+  let docs = [];
   try {
-    const doc = await invoke("startup_file");
-    if (doc) {
-      loadDoc(doc);
-      setMode("view"); // al abrir desde el Explorador se muestra la vista
-      return;
-    }
+    docs = await invoke("startup_files");
   } catch (e) {
     alert(e);
   }
-  loadDoc({ path: null, content: "" });
-  setMode("split");
-  editor.focus();
+  if (!docs.length) {
+    activate(createTab());
+    return;
+  }
+  // Al abrir desde el Explorador se muestra la vista
+  for (const doc of docs) openInTab(doc, "view");
 })();

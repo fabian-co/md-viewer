@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 use std::sync::{mpsc, Mutex};
 use std::time::Duration;
@@ -12,17 +14,19 @@ use tauri_plugin_opener::OpenerExt;
 
 const MD_EXTENSIONS: &[&str] = &["md", "markdown", "mdown", "mkd", "txt"];
 
-/// Archivo con el que se abrió la app (doble clic en un .md desde el Explorador o Finder).
-/// `ready` indica que la interfaz ya lo pidió; a partir de ahí los archivos nuevos se emiten como evento.
+/// Archivos con los que se abrió la app (doble clic en un .md desde el Explorador o Finder).
+/// `ready` indica que la interfaz ya los pidió; a partir de ahí los archivos nuevos se emiten
+/// como evento `open-file` y se abren en una pestaña de la ventana existente.
 struct StartupFile(Mutex<Startup>);
 
 struct Startup {
-    path: Option<PathBuf>,
+    paths: Vec<PathBuf>,
     ready: bool,
 }
 
-/// Vigilante del archivo abierto, para recargarlo cuando otro programa (un editor, una IA) lo modifica.
-struct FileWatch(Mutex<Option<notify::RecommendedWatcher>>);
+/// Vigilantes de los archivos abiertos en pestañas (uno por ruta), para recargarlos cuando
+/// otro programa (un editor, una IA) los modifica.
+struct FileWatch(Mutex<HashMap<String, notify::RecommendedWatcher>>);
 
 #[derive(Serialize, Clone)]
 struct Doc {
@@ -40,13 +44,23 @@ fn read_doc(path: &Path) -> Result<Doc, String> {
     })
 }
 
+/// Archivos pendientes de abrir al cargar la interfaz (los que no se puedan leer se omiten).
 #[tauri::command]
-fn startup_file(state: State<StartupFile>) -> Result<Option<Doc>, String> {
+fn startup_files(state: State<StartupFile>) -> Vec<Doc> {
     let mut startup = state.0.lock().unwrap();
     startup.ready = true;
-    match startup.path.take() {
-        Some(path) => read_doc(&path).map(Some),
-        None => Ok(None),
+    startup.paths.drain(..).filter_map(|p| read_doc(&p).ok()).collect()
+}
+
+/// Abre `path` en una pestaña: si la interfaz ya cargó se emite el evento, si no se deja en cola.
+fn open_in_tab(app: &AppHandle, path: PathBuf) {
+    use tauri::Manager;
+    let state = app.state::<StartupFile>();
+    let mut startup = state.0.lock().unwrap();
+    if startup.ready {
+        let _ = app.emit("open-file", path.to_string_lossy().into_owned());
+    } else {
+        startup.paths.push(path);
     }
 }
 
@@ -60,16 +74,31 @@ fn write_file(path: String, content: String) -> Result<(), String> {
     std::fs::write(&path, content).map_err(|e| format!("No se pudo guardar {path}: {e}"))
 }
 
-/// Empieza a vigilar `path` (o deja de vigilar si es `None`) y emite `file-changed` con el contenido nuevo.
+/// Vigila exactamente las rutas de `paths` (las pestañas abiertas con archivo) y emite `file-changed`
+/// con el contenido nuevo cuando alguna cambia. Las rutas que ya se vigilaban se conservan.
+#[tauri::command]
+fn watch_files(app: AppHandle, state: State<FileWatch>, paths: Vec<String>) -> Result<(), String> {
+    let mut map = state.0.lock().unwrap();
+    // Soltar un vigilante cierra su canal y termina su hilo
+    map.retain(|p, _| paths.contains(p));
+    let mut errors = Vec::new();
+    for path in paths {
+        if map.contains_key(&path) {
+            continue;
+        }
+        match watch_one(app.clone(), PathBuf::from(&path)) {
+            Ok(w) => {
+                map.insert(path, w);
+            }
+            Err(e) => errors.push(e),
+        }
+    }
+    if errors.is_empty() { Ok(()) } else { Err(errors.join("\n")) }
+}
+
 /// Se vigila la carpeta y no el archivo: muchos programas guardan escribiendo un temporal y renombrándolo,
 /// y eso rompe la vigilancia directa del archivo.
-#[tauri::command]
-fn watch_file(app: AppHandle, state: State<FileWatch>, path: Option<String>) -> Result<(), String> {
-    let mut slot = state.0.lock().unwrap();
-    // Soltar el vigilante anterior cierra su canal y termina su hilo
-    *slot = None;
-    let Some(path) = path else { return Ok(()) };
-    let target = PathBuf::from(path);
+fn watch_one(app: AppHandle, target: PathBuf) -> Result<notify::RecommendedWatcher, String> {
     let (Some(dir), Some(name)) = (target.parent(), target.file_name()) else {
         return Err("Ruta no válida".into());
     };
@@ -113,8 +142,7 @@ fn watch_file(app: AppHandle, state: State<FileWatch>, path: Option<String>) -> 
         }
     });
 
-    *slot = Some(watcher);
-    Ok(())
+    Ok(watcher)
 }
 
 #[tauri::command]
@@ -176,43 +204,60 @@ fn open_url(app: AppHandle, url: String) -> Result<(), String> {
     app.opener().open_url(url, None::<&str>).map_err(|e| e.to_string())
 }
 
-/// Primer argumento que sea un archivo existente (Windows y Linux pasan la ruta como argv[1]).
-fn file_from_args() -> Option<PathBuf> {
-    std::env::args_os()
-        .skip(1)
+/// Argumentos que sean archivos existentes (Windows y Linux pasan las rutas como argv[1..]).
+/// Las rutas relativas se resuelven contra `cwd` (la carpeta desde la que se lanzó esa instancia).
+fn files_from_args(args: impl IntoIterator<Item = OsString>, cwd: Option<&Path>) -> Vec<PathBuf> {
+    args.into_iter()
         .map(PathBuf::from)
-        .find(|p| !p.to_string_lossy().starts_with('-') && p.is_file())
+        .filter(|p| !p.to_string_lossy().starts_with('-'))
+        .map(|p| match cwd {
+            Some(cwd) if p.is_relative() => cwd.join(p),
+            _ => p,
+        })
+        .filter(|p| p.is_file())
+        .collect()
 }
 
 /// macOS no pasa el archivo por argumentos: llega como evento `Opened` (antes o después de cargar la interfaz).
 #[cfg(any(target_os = "macos", target_os = "ios"))]
 fn handle_opened(app: &AppHandle, urls: Vec<tauri::Url>) {
-    use tauri::{Emitter, Manager};
-    let Some(path) = urls.into_iter().find_map(|u| u.to_file_path().ok()) else { return };
-    let state = app.state::<StartupFile>();
-    let mut startup = state.0.lock().unwrap();
-    if startup.ready {
-        let _ = app.emit("open-file", path.to_string_lossy().into_owned());
-    } else {
-        startup.path = Some(path);
+    for path in urls.into_iter().filter_map(|u| u.to_file_path().ok()) {
+        open_in_tab(app, path);
     }
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    let app = tauri::Builder::default()
+    let builder = tauri::Builder::default();
+    // Una sola instancia: abrir otro .md con la app en marcha lo manda a una pestaña nueva
+    // de la ventana existente en lugar de abrir otra ventana. Debe ser el primer plugin.
+    #[cfg(desktop)]
+    let builder = builder.plugin(tauri_plugin_single_instance::init(|app, argv, cwd| {
+        use tauri::Manager;
+        let cwd = PathBuf::from(cwd);
+        for path in files_from_args(argv.into_iter().skip(1).map(OsString::from), Some(&cwd)) {
+            open_in_tab(app, path);
+        }
+        if let Some(win) = app.get_webview_window("main") {
+            let _ = win.unminimize();
+            let _ = win.show();
+            let _ = win.set_focus();
+        }
+    }));
+
+    let app = builder
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .manage(StartupFile(Mutex::new(Startup {
-            path: file_from_args(),
+            paths: files_from_args(std::env::args_os().skip(1), std::env::current_dir().ok().as_deref()),
             ready: false,
         })))
-        .manage(FileWatch(Mutex::new(None)))
+        .manage(FileWatch(Mutex::new(HashMap::new())))
         .invoke_handler(tauri::generate_handler![
-            startup_file,
+            startup_files,
             read_file,
             write_file,
-            watch_file,
+            watch_files,
             render_markdown,
             count_tokens,
             open_dialog,

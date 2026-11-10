@@ -9,12 +9,15 @@ Visor y editor sencillo de archivos Markdown hecho con Tauri 2 + Rust. Funciona 
 - Contador de palabras, caracteres y tokens aproximados para LLMs (tokenizador o200k de GPT-4o; otros modelos pueden variar)
 - Ventana «Acerca de» con la versión, el repositorio y búsqueda de actualizaciones
 - Recarga en tiempo real: si otro programa (un editor, una IA) modifica el archivo abierto, se actualiza al instante sin perder el scroll
-- Arrastrar y soltar archivos sobre la ventana
+- Pestañas: abrir otro `.md` con la app en marcha (doble clic en el Explorador, Finder o «Abrir con») lo añade como pestaña en la ventana existente en lugar de abrir otra ventana. Cada pestaña conserva su historial de deshacer, cursor, scroll y vista; las que tienen cambios sin guardar muestran un punto
+- Arrastrar y soltar archivos sobre la ventana (cada uno en su pestaña)
 - Atajos (`Ctrl` en Windows/Linux, `⌘` en macOS):
 
 | Atajo | Acción |
 |-------|--------|
-| `Ctrl/⌘+N` | Nuevo |
+| `Ctrl/⌘+N` / `Ctrl/⌘+T` | Nueva pestaña |
+| `Ctrl/⌘+W` | Cerrar pestaña (también clic central) |
+| `Ctrl+Tab` / `Ctrl+Shift+Tab` | Pestaña siguiente / anterior (también `Ctrl/⌘+AvPág` / `RePág`) |
 | `Ctrl/⌘+O` | Abrir |
 | `Ctrl/⌘+S` | Guardar |
 | `Ctrl/⌘+Shift+S` | Guardar como |
@@ -30,16 +33,16 @@ Visor y editor sencillo de archivos Markdown hecho con Tauri 2 + Rust. Funciona 
 
 ## Descargas
 
-Última versión: **[v1.3.0](https://github.com/fabian-co/md-viewer/releases/latest)**
+Última versión: **[v1.4.0](https://github.com/fabian-co/md-viewer/releases/latest)**
 
 | Sistema | Descarga |
 |---------|----------|
-| Windows | [Instalador `.exe`](https://github.com/fabian-co/md-viewer/releases/download/v1.3.0/MD.Viewer_1.3.0_x64-setup.exe) · [`.msi`](https://github.com/fabian-co/md-viewer/releases/download/v1.3.0/MD.Viewer_1.3.0_x64_en-US.msi) |
-| macOS (Apple Silicon M1/M2/M3…) | [`.dmg`](https://github.com/fabian-co/md-viewer/releases/download/v1.3.0/MD.Viewer_1.3.0_aarch64.dmg) |
-| macOS (Intel) | [`.dmg`](https://github.com/fabian-co/md-viewer/releases/download/v1.3.0/MD.Viewer_1.3.0_x64.dmg) |
-| Linux (Debian/Ubuntu) | [`.deb`](https://github.com/fabian-co/md-viewer/releases/download/v1.3.0/MD.Viewer_1.3.0_amd64.deb) |
-| Linux (Fedora/openSUSE) | [`.rpm`](https://github.com/fabian-co/md-viewer/releases/download/v1.3.0/MD.Viewer-1.3.0-1.x86_64.rpm) |
-| Linux (cualquier distro) | [`.AppImage`](https://github.com/fabian-co/md-viewer/releases/download/v1.3.0/MD.Viewer_1.3.0_amd64.AppImage) |
+| Windows | [Instalador `.exe`](https://github.com/fabian-co/md-viewer/releases/download/v1.4.0/MD.Viewer_1.4.0_x64-setup.exe) · [`.msi`](https://github.com/fabian-co/md-viewer/releases/download/v1.4.0/MD.Viewer_1.4.0_x64_en-US.msi) |
+| macOS (Apple Silicon M1/M2/M3…) | [`.dmg`](https://github.com/fabian-co/md-viewer/releases/download/v1.4.0/MD.Viewer_1.4.0_aarch64.dmg) |
+| macOS (Intel) | [`.dmg`](https://github.com/fabian-co/md-viewer/releases/download/v1.4.0/MD.Viewer_1.4.0_x64.dmg) |
+| Linux (Debian/Ubuntu) | [`.deb`](https://github.com/fabian-co/md-viewer/releases/download/v1.4.0/MD.Viewer_1.4.0_amd64.deb) |
+| Linux (Fedora/openSUSE) | [`.rpm`](https://github.com/fabian-co/md-viewer/releases/download/v1.4.0/MD.Viewer-1.4.0-1.x86_64.rpm) |
+| Linux (cualquier distro) | [`.AppImage`](https://github.com/fabian-co/md-viewer/releases/download/v1.4.0/MD.Viewer_1.4.0_amd64.AppImage) |
 
 Todas las versiones están en la pestaña [Releases](https://github.com/fabian-co/md-viewer/releases).
 
@@ -64,4 +67,4 @@ npm run dev     # modo desarrollo
 npm run build   # instaladores en src-tauri/target/release/bundle/
 ```
 
-Para publicar una versión: `git tag v1.3.0 && git push --tags` crea un release con los instaladores de los tres sistemas.
+Para publicar una versión: `git tag v1.4.0 && git push --tags` crea un release con los instaladores de los tres sistemas.
