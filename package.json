@@ -1,11 +1,12 @@
 {
   "name": "md-viewer",
   "private": true,
-  "version": "1.4.0",
+  "version": "1.5.0",
   "scripts": {
     "tauri": "tauri",
     "dev": "tauri dev",
-    "build": "tauri build"
+    "build": "tauri build",
+    "test": "node tests/intent.test.js && node tests/reply.test.js && cargo test --manifest-path src-tauri/Cargo.toml --lib"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2"

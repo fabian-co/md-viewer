@@ -103,6 +103,7 @@ function activate(tab) {
   updateTitle();
   updateCount();
   if (tab.mode !== "view") editor.focus();
+  window.AI?.onTabChange(tab);
 }
 
 async function closeTab(tab) {
@@ -114,6 +115,7 @@ async function closeTab(tab) {
   tabs.splice(i, 1);
   tab.el.remove();
   tab.tabEl.remove();
+  window.AI?.onTabClosed(tab);
   if (current === tab) {
     current = null;
     // Siempre queda al menos una pestaña
@@ -188,7 +190,9 @@ let renderSeq = 0;
 async function render() {
   const seq = ++renderSeq;
   const html = await invoke("render_markdown", { text: editor.value });
-  if (seq === renderSeq) preview.innerHTML = html; // descarta resultados de otra pestaña
+  if (seq !== renderSeq) return; // descarta resultados de otra pestaña
+  preview.innerHTML = html;
+  window.AI?.onPreviewRender();
 }
 
 function applyMode(mode) {
@@ -319,11 +323,79 @@ async function saveAs() {
 
 // ---------- Eventos ----------
 
-document.getElementById("btn-new").onclick = newDoc;
 document.getElementById("btn-new-tab").onclick = newDoc;
-document.getElementById("btn-open").onclick = openDoc;
-document.getElementById("btn-save").onclick = save;
-document.getElementById("btn-save-as").onclick = saveAs;
+
+// ---------- Menús desplegables (Archivo, Acerca de) ----------
+
+const commands = {
+  new: newDoc,
+  open: openDoc,
+  save,
+  saveAs,
+  close: () => closeTab(current),
+  about: () => openAbout(),
+  checkUpdates: () => openAbout(true),
+  releases: () => invoke("open_url", { url: `https://github.com/${REPO}/releases` }),
+  mcp: () => window.openMcpDialog?.(),
+};
+
+const menubar = document.getElementById("menubar");
+let openMenu = null;
+
+function showMenu(menu) {
+  if (openMenu === menu) return;
+  closeMenu();
+  openMenu = menu;
+  menu.classList.add("open");
+  menu.querySelector(".menu-btn").setAttribute("aria-expanded", "true");
+}
+
+function closeMenu() {
+  if (!openMenu) return;
+  openMenu.classList.remove("open");
+  openMenu.querySelector(".menu-btn").setAttribute("aria-expanded", "false");
+  openMenu = null;
+}
+
+menubar.querySelectorAll(".menu").forEach((menu) => {
+  const btn = menu.querySelector(".menu-btn");
+  btn.addEventListener("mousedown", (e) => e.preventDefault()); // no robar el foco al editor
+  btn.addEventListener("click", () => (openMenu === menu ? closeMenu() : showMenu(menu)));
+  // Con un menú abierto, pasar el ratón por otro lo abre (como en las apps de escritorio)
+  btn.addEventListener("mouseenter", () => openMenu && showMenu(menu));
+  btn.addEventListener("keydown", (e) => {
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      showMenu(menu);
+      menu.querySelector("[data-cmd]").focus();
+    }
+  });
+  const items = [...menu.querySelectorAll("[data-cmd]")];
+  items.forEach((item, i) => {
+    item.addEventListener("mousedown", (e) => e.preventDefault());
+    item.addEventListener("click", () => {
+      closeMenu();
+      commands[item.dataset.cmd]();
+    });
+    item.addEventListener("keydown", (e) => {
+      if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+        e.preventDefault();
+        items[(i + (e.key === "ArrowDown" ? 1 : -1) + items.length) % items.length].focus();
+      }
+    });
+  });
+});
+document.addEventListener("mousedown", (e) => {
+  if (openMenu && !e.target.closest(".menu")) closeMenu();
+});
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && openMenu) {
+    const btn = openMenu.querySelector(".menu-btn");
+    closeMenu();
+    btn.focus();
+  }
+});
+window.addEventListener("blur", closeMenu);
 document.querySelectorAll(".modes button").forEach((b) => (b.onclick = () => setMode(b.dataset.mode)));
 
 // Doble clic en el espacio libre de la barra de pestañas: nueva pestaña
@@ -408,14 +480,15 @@ const aboutUpdate = document.getElementById("about-update");
 const { getVersion, getTauriVersion } = window.__TAURI__.app;
 const appVersion = getVersion();
 
-document.getElementById("btn-about").onclick = async () => {
+async function openAbout(checkNow = false) {
   const [version, tauri] = await Promise.all([appVersion, getTauriVersion()]);
   document.getElementById("about-version").textContent = `Versión ${version}`;
   document.getElementById("about-tech").textContent = `Tauri ${tauri} + Rust`;
   aboutUpdate.textContent = "";
   aboutUpdate.className = "update";
-  about.showModal();
-};
+  if (!about.open) about.showModal();
+  if (checkNow) checkUpdates();
+}
 document.getElementById("about-close").onclick = () => about.close();
 document.getElementById("about-releases").onclick = () =>
   invoke("open_url", { url: `https://github.com/${REPO}/releases` });
@@ -436,7 +509,8 @@ const newer = (a, b) => {
   return false;
 };
 
-document.getElementById("about-check").onclick = async () => {
+document.getElementById("about-check").onclick = () => checkUpdates();
+async function checkUpdates() {
   aboutUpdate.className = "update";
   aboutUpdate.textContent = "Buscando…";
   try {
@@ -452,7 +526,7 @@ document.getElementById("about-check").onclick = async () => {
   } catch {
     aboutUpdate.textContent = "No se pudo comprobar (¿sin conexión?).";
   }
-};
+}
 
 // ---------- Divisor arrastrable (modo dividido) ----------
 
@@ -556,6 +630,7 @@ document.addEventListener("keydown", (e) => {
   else if (k === "w") { e.preventDefault(); closeTab(current); }
   else if (e.key === "PageDown") { e.preventDefault(); cycleTab(1); }
   else if (e.key === "PageUp") { e.preventDefault(); cycleTab(-1); }
+  else if (k === "j") { e.preventDefault(); window.AI?.toggle(); }
   else if (k === "e") {
     e.preventDefault();
     const i = modes.indexOf(document.body.dataset.mode);
@@ -588,10 +663,20 @@ appWindow.onCloseRequested((event) => {
 
 // Muestra los atajos con ⌘ en macOS
 if (isMac) {
-  document.querySelectorAll("[title*='Ctrl+']").forEach((el) => {
-    el.title = el.title.replace(/Ctrl\+Shift\+/g, "⇧⌘").replace(/Ctrl\+/g, "⌘");
-  });
+  const mac = (t) => t.replace(/Ctrl\+Shift\+/g, "⇧⌘").replace(/Ctrl\+/g, "⌘");
+  document.querySelectorAll("[title*='Ctrl+']").forEach((el) => (el.title = mac(el.title)));
+  document.querySelectorAll("kbd").forEach((el) => (el.textContent = mac(el.textContent)));
 }
+
+// Puente para el asistente (ai.js): pestaña activa, editor y utilidades
+window.App = {
+  get tab() { return current; },
+  get editor() { return editor; },
+  baseName,
+  invoke,
+  flash,
+  isMac,
+};
 
 (async () => {
   let docs = [];

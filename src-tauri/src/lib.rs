@@ -1,3 +1,6 @@
+mod ai;
+mod mcp;
+
 use std::collections::HashMap;
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
@@ -6,7 +9,7 @@ use std::time::Duration;
 
 use notify::{EventKind, RecursiveMode, Watcher};
 
-use pulldown_cmark::{html, Options, Parser};
+use pulldown_cmark::{html, Event, Options, Parser};
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, State};
 use tauri_plugin_dialog::DialogExt;
@@ -145,15 +148,78 @@ fn watch_one(app: AppHandle, target: PathBuf) -> Result<notify::RecommendedWatch
     Ok(watcher)
 }
 
-#[tauri::command]
-fn render_markdown(text: String) -> String {
+fn md_options() -> Options {
     let mut opts = Options::empty();
     opts.insert(Options::ENABLE_TABLES);
     opts.insert(Options::ENABLE_STRIKETHROUGH);
     opts.insert(Options::ENABLE_TASKLISTS);
     opts.insert(Options::ENABLE_FOOTNOTES);
     opts.insert(Options::ENABLE_HEADING_ATTRIBUTES);
-    let parser = Parser::new_ext(&text, opts);
+    opts
+}
+
+/// Renderiza el documento envolviendo cada bloque de primer nivel (párrafo, título, lista, cita,
+/// código, tabla…) en `<div class="md-block" data-from data-to>` con su rango de líneas (desde 0,
+/// ambas incluidas): así la vista previa sabe qué parte del texto corresponde a cada bloque.
+#[tauri::command]
+fn render_markdown(text: String) -> String {
+    let line_starts: Vec<usize> = std::iter::once(0)
+        .chain(text.match_indices('\n').map(|(i, _)| i + 1))
+        .collect();
+    let line_of = |byte: usize| line_starts.partition_point(|&s| s <= byte).saturating_sub(1);
+
+    let mut events = Vec::new();
+    let mut depth = 0usize;
+    for (ev, range) in Parser::new_ext(&text, md_options()).into_offset_iter() {
+        let open = || {
+            // Sin las líneas en blanco del final (las listas las incluyen en su rango)
+            let len = text[range.clone()].trim_end().len().max(1);
+            Event::Html(
+                format!(
+                    "<div class=\"md-block\" data-from=\"{}\" data-to=\"{}\">",
+                    line_of(range.start),
+                    line_of(range.start + len - 1)
+                )
+                .into(),
+            )
+        };
+        match ev {
+            Event::Start(_) => {
+                if depth == 0 {
+                    events.push(open());
+                }
+                events.push(ev);
+                depth += 1;
+            }
+            Event::End(_) => {
+                depth = depth.saturating_sub(1);
+                events.push(ev);
+                if depth == 0 {
+                    events.push(Event::Html("</div>\n".into()));
+                }
+            }
+            // Bloques sueltos de primer nivel (línea horizontal)
+            Event::Rule if depth == 0 => {
+                events.push(open());
+                events.push(ev);
+                events.push(Event::Html("</div>\n".into()));
+            }
+            other => events.push(other),
+        }
+    }
+    let mut out = String::with_capacity(text.len() * 3 / 2);
+    html::push_html(&mut out, events.into_iter());
+    out
+}
+
+/// Igual que `render_markdown` pero el HTML crudo se muestra como texto: para las respuestas
+/// de la IA, que no deben poder inyectar etiquetas ni scripts en la interfaz.
+#[tauri::command]
+fn render_markdown_safe(text: String) -> String {
+    let parser = Parser::new_ext(&text, md_options()).map(|ev| match ev {
+        Event::Html(h) | Event::InlineHtml(h) => Event::Text(h),
+        other => other,
+    });
     let mut out = String::with_capacity(text.len() * 3 / 2);
     html::push_html(&mut out, parser);
     out
@@ -228,6 +294,11 @@ fn handle_opened(app: &AppHandle, urls: Vec<tauri::Url>) {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // `md-viewer --mcp`: puente stdio para clientes MCP (Claude Desktop), sin abrir ventana
+    if std::env::args().skip(1).any(|a| a == "--mcp") {
+        mcp::stdio_bridge();
+        return;
+    }
     let builder = tauri::Builder::default();
     // Una sola instancia: abrir otro .md con la app en marcha lo manda a una pestaña nueva
     // de la ventana existente en lugar de abrir otra ventana. Debe ser el primer plugin.
@@ -253,16 +324,30 @@ pub fn run() {
             ready: false,
         })))
         .manage(FileWatch(Mutex::new(HashMap::new())))
+        .manage(ai::AiJobs::default())
+        .manage(std::sync::Arc::new(mcp::McpBridge::default()))
+        .setup(|app| {
+            mcp::start(app.handle().clone());
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             startup_files,
             read_file,
             write_file,
             watch_files,
             render_markdown,
+            render_markdown_safe,
             count_tokens,
             open_dialog,
             save_as_dialog,
-            open_url
+            open_url,
+            ai::ai_key_status,
+            ai::ai_set_key,
+            ai::ai_list_models,
+            ai::ai_chat,
+            ai::ai_cancel,
+            mcp::mcp_reply,
+            mcp::mcp_info
         ])
         .build(tauri::generate_context!())
         .expect("error al iniciar MD Viewer");
@@ -273,4 +358,20 @@ pub fn run() {
             handle_opened(_app, urls);
         }
     });
+}
+
+#[cfg(test)]
+mod render_tests {
+    use super::render_markdown;
+
+    #[test]
+    fn bloques_con_lineas() {
+        let html = render_markdown("# Título\n\nUno\ndos\n\n- a\n- b\n\n---\n\n```\nx\n```\n".into());
+        assert!(html.contains(r#"<div class="md-block" data-from="0" data-to="0">"#), "{html}");
+        assert!(html.contains(r#"data-from="2" data-to="3">"#), "{html}");
+        assert!(html.contains(r#"data-from="5" data-to="6">"#), "{html}");
+        assert!(html.contains(r#"data-from="8" data-to="8">"#), "{html}");
+        assert!(html.contains(r#"data-from="10" data-to="12">"#), "{html}");
+        assert_eq!(html.matches("<div class=\"md-block\"").count(), html.matches("</div>").count());
+    }
 }

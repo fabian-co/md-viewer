@@ -8,20 +8,40 @@
 </head>
 <body data-mode="split">
   <header class="toolbar">
-    <div class="group">
-      <button id="btn-new" title="Nuevo (Ctrl+N)">Nuevo</button>
-      <button id="btn-open" title="Abrir (Ctrl+O)">Abrir</button>
-      <button id="btn-save" title="Guardar (Ctrl+S)">Guardar</button>
-      <button id="btn-save-as" title="Guardar como (Ctrl+Shift+S)">Guardar como</button>
+    <div class="menubar" id="menubar">
+      <div class="menu">
+        <button class="menu-btn" aria-haspopup="menu" aria-expanded="false">Archivo</button>
+        <div class="menu-list" role="menu">
+          <button role="menuitem" data-cmd="new">Nueva pestaña<kbd>Ctrl+T</kbd></button>
+          <button role="menuitem" data-cmd="open">Abrir…<kbd>Ctrl+O</kbd></button>
+          <hr />
+          <button role="menuitem" data-cmd="save">Guardar<kbd>Ctrl+S</kbd></button>
+          <button role="menuitem" data-cmd="saveAs">Guardar como…<kbd>Ctrl+Shift+S</kbd></button>
+          <hr />
+          <button role="menuitem" data-cmd="close">Cerrar pestaña<kbd>Ctrl+W</kbd></button>
+        </div>
+      </div>
+      <div class="menu">
+        <button class="menu-btn" aria-haspopup="menu" aria-expanded="false">Acerca de</button>
+        <div class="menu-list" role="menu">
+          <button role="menuitem" data-cmd="about">Acerca de MD Viewer</button>
+          <button role="menuitem" data-cmd="checkUpdates">Buscar actualizaciones</button>
+          <button role="menuitem" data-cmd="releases">Ver versiones en GitHub</button>
+          <hr />
+          <button role="menuitem" data-cmd="mcp">Conectar por MCP…</button>
+        </div>
+      </div>
     </div>
     <div class="file" id="file-name">Sin título</div>
-    <div class="group modes" title="Cambiar vista (Ctrl+E)">
-      <button data-mode="edit">Editar</button>
-      <button data-mode="split">Dividido</button>
-      <button data-mode="view">Vista</button>
+    <div class="segmented modes" role="group" aria-label="Vista" title="Cambiar vista (Ctrl+E)">
+      <button data-mode="edit"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16z"/><path d="m13.5 6.5 4 4"/></svg>Editar</button>
+      <button data-mode="split"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M12 4v16"/></svg>Dividido</button>
+      <button data-mode="view"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>Vista</button>
     </div>
-    <button id="btn-about" class="icon-btn" title="Acerca de MD Viewer" aria-label="Acerca de">
-      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5v.01"/></svg>
+    <span class="toolbar-sep" aria-hidden="true"></span>
+    <button id="btn-ai" class="ai-toggle" title="Asistente IA (Ctrl+J)" aria-pressed="false">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.5 13.9 9a1.5 1.5 0 0 0 1 1l5.6 2-5.6 2a1.5 1.5 0 0 0-1 1L12 20.5 10.1 15a1.5 1.5 0 0 0-1-1L3.5 12l5.6-2a1.5 1.5 0 0 0 1-1z"/><path d="M19 3v4M17 5h4"/></svg>
+      Asistente IA
     </button>
   </header>
 
@@ -70,6 +90,30 @@
     </section>
     <div class="splitter" id="splitter" title="Arrastra para cambiar el tamaño (doble clic: mitad y mitad)"></div>
     <article id="preview" class="markdown"></article>
+
+    <aside class="ai-panel" id="ai-panel" hidden aria-label="Asistente IA">
+      <header class="ai-head">
+        <select id="ai-provider" title="Proveedor y modelo"></select>
+        <button id="ai-new-chat" class="icon-btn" title="Nueva conversación" aria-label="Nueva conversación">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+        </button>
+        <button id="ai-open-settings" class="icon-btn" title="Configurar proveedores y API keys" aria-label="Configurar">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
+        </button>
+        <button id="ai-close" class="icon-btn" title="Cerrar asistente (Ctrl+J)" aria-label="Cerrar asistente">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>
+        </button>
+      </header>
+      <div class="ai-messages" id="ai-messages"></div>
+      <form class="ai-input" id="ai-form">
+        <div class="ai-context" id="ai-context"></div>
+        <textarea id="ai-prompt" rows="3" placeholder="Pregunta o pide un cambio en el documento…  (Enter envía, Shift+Enter nueva línea)"></textarea>
+        <div class="ai-input-actions">
+          <span class="ai-hint">Preguntas: respuesta en el chat · Peticiones: van al documento</span>
+          <button type="submit" id="ai-send" class="primary">Enviar</button>
+        </div>
+      </form>
+    </aside>
   </main>
 
   <footer class="status">
@@ -96,7 +140,61 @@
     </div>
   </dialog>
 
+  <dialog class="ai-settings mcp-dialog" id="mcp-dialog">
+    <div class="mcp-body">
+      <h2>Conectar por MCP</h2>
+      <p class="ais-help">Mientras MD Viewer está abierto, los clientes MCP (Claude Code, Claude Desktop, Cursor…) pueden listar, leer, editar, abrir y guardar los documentos de tus pestañas, incluidos los cambios sin guardar. Solo acepta conexiones de este equipo.</p>
+      <p class="mcp-error" id="mcp-error" hidden></p>
+      <label>Claude Code (en una terminal)</label>
+      <div class="mcp-copy" id="mcp-claude-code"><code></code><button type="button">Copiar</button></div>
+      <label>Claude Desktop (claude_desktop_config.json)</label>
+      <div class="mcp-copy" id="mcp-desktop"><code></code><button type="button">Copiar</button></div>
+      <label>Otros clientes (HTTP)</label>
+      <div class="mcp-copy" id="mcp-url"><code></code><button type="button">Copiar</button></div>
+      <p class="ais-note">Herramientas: list_documents, read_document, get_selection, edit_document, insert_text, write_document, open_document, new_document y save_document. Los cambios se pueden deshacer con Ctrl+Z y no se guardan en disco hasta que se pide.</p>
+      <div class="actions"><button type="button" class="primary" id="mcp-close">Cerrar</button></div>
+    </div>
+  </dialog>
+
+  <dialog class="ai-settings" id="ai-settings">
+    <form method="dialog" id="ai-settings-form">
+      <h2>Asistente IA</h2>
+      <label>Proveedor
+        <select id="ais-provider"></select>
+      </label>
+      <p class="ais-help" id="ais-help"></p>
+      <div class="ais-key" id="ais-key-row">
+        <label>API key
+          <input id="ais-key" type="password" autocomplete="off" spellcheck="false" />
+        </label>
+        <div class="ais-key-status">
+          <span id="ais-key-status"></span>
+          <button type="button" id="ais-key-delete">Borrar clave</button>
+        </div>
+      </div>
+      <label id="ais-base-row">URL base
+        <input id="ais-base" type="text" autocomplete="off" spellcheck="false" />
+      </label>
+      <label>Modelo
+        <div class="ais-model">
+          <input id="ais-model" type="text" list="ais-models" autocomplete="off" spellcheck="false" />
+          <button type="button" id="ais-load-models" title="Consultar los modelos disponibles con esta clave">Cargar modelos</button>
+        </div>
+        <datalist id="ais-models"></datalist>
+      </label>
+      <p class="ais-msg" id="ais-msg"></p>
+      <p class="ais-note">Las claves se guardan en el llavero del sistema (Administrador de credenciales en Windows, Llavero en macOS, Secret Service en Linux) y solo se envían al proveedor elegido. El documento abierto se envía al proveedor con cada pregunta.</p>
+      <div class="actions">
+        <button type="button" id="ais-cancel">Cancelar</button>
+        <button type="submit" id="ais-save" class="primary">Guardar y usar</button>
+      </div>
+    </form>
+  </dialog>
+
   <script src="format.js"></script>
+  <script src="intent.js"></script>
   <script src="main.js"></script>
+  <script src="ai.js"></script>
+  <script src="mcp.js"></script>
 </body>
 </html>
